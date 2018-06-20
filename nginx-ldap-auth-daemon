@@ -8,6 +8,11 @@ import base64
 import ldap
 import argparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import logging
+
+logger = logging.getLogger()
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.INFO)
 
 # -----------------------------------------------------------------------------
 # Requests are processed in separate thread
@@ -46,12 +51,12 @@ def read_conf(fname):
                 if len(data) > 1 and data[0] in opts:
                     conf[data[0]] = ' '.join(data[1:])
     except Exception:
-        print("Unable to read {} as uid {}: {}".format(fname, os.getuid(), sys.exc_info()))
+        logger.critical("Unable to read {} as uid {}: {}".format(fname, os.getuid(), sys.exc_info()))
         sys.exit(1)
 
     for o in opts[:4]:
         if o not in conf:
-            print("Mandatory parameter '{}' was not found in config file {}!".format(o, fname))
+            logger.critical("Mandatory parameter '{}' was not found in config file {}!".format(o, fname))
             sys.exit(1)
 
 
@@ -91,6 +96,7 @@ def check_auth(user, passwd, allowusr, allowgr):
                 try:
                     ldap_connection.simple_bind_s(data['distinguishedName'][0].decode('utf-8'), passwd)
                 except ldap.INVALID_CREDENTIALS:
+                    logger.warning("Login failed for user {}".format(user))
                     return False
                 # check allowed users
                 if allowusr and user.lower() in [x.lower().strip() for x in allowusr.split(',')]:
@@ -107,7 +113,9 @@ def check_auth(user, passwd, allowusr, allowgr):
                 # user found but not in allowed
                 return False if allowusr or allowgr else True
         except (ldap.CONNECT_ERROR, ldap.SERVER_DOWN):
-            pass  # try next server
+            logger.warning('Connection error to server {}'.format(host))
+            # try next server
+            continue
         finally:
             if ldap_connection:
                 ldap_connection.unbind()
@@ -130,7 +138,8 @@ class LDAPAuthHandler(BaseHTTPRequestHandler):
                 realm = 'Authorization required'
             self.send_header('WWW-Authenticate', 'Basic realm="{}"'.format(realm))
             self.send_header('Cache-Control', 'no-cache')
-        except:
+        except Exception:
+            logger.exception('Unhandled exception in LdapAuthHandler')
             self.send_response(500)
             self.send_header('X-Error-Message', sys.exc_info()[1])
         finally:
