@@ -85,16 +85,16 @@ def check_auth(user, passwd, allowusr, allowgr):
                 except ldap.INVALID_CREDENTIALS:
                     return False
                 # check allowed users
-                if allowusr and user.lower() in [x.lower().strip() for x in allowusr.split(',')]:
+                if allowusr and user.lower() in [x.lower().strip() for x in allowusr.split('|')]:
                     return True
                 # check allowed groups
                 if allowgr:
                     groups = data['memberOf']
                     if 'msSFU30PosixMemberOf' in data.keys():
                         groups += data['msSFU30PosixMemberOf']
-                    for g in [x.lower().strip() for x in allowgr.split(',')]:
+                    for g in [x.strip() for x in allowgr.split('|')]:
                         for group in groups:
-                            if group.lower().startswith('cn={},'.format(g)):
+                            if group == g:
                                 return True
                 # user found but not in allowed
                 return False if allowusr or allowgr else True
